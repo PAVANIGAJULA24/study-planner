@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Study Planner Dashboard</title>
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+
+body{
+background:#f4f6f9;
+font-family:'Segoe UI', sans-serif;
+}
+
+/* Sidebar */
+
+.sidebar{
+height:100vh;
+background:#1e293b;
+color:white;
+padding-top:30px;
+position: fixed;
+top: 56px; /* Height of navbar */
+left: 0;
+width: 16.666667%; /* col-md-2 width */
+overflow-y: auto;
+}
+
+.sidebar h4{
+text-align:center;
+margin-bottom:30px;
+}
+
+.sidebar a{
+display:block;
+color:#cbd5f5;
+padding:12px 20px;
+text-decoration:none;
+}
+
+.sidebar a:hover{
+background:#334155;
+color:white;
+}
+
+/* Cards */
+
+.dashboard-card{
+border-radius:12px;
+padding:20px;
+color:white;
+transition: all 0.3s ease;
+cursor: pointer;
+position: relative;
+overflow: hidden;
+}
+
+.dashboard-card::before {
+content: '';
+position: absolute;
+top: 0;
+left: -100%;
+width: 100%;
+height: 100%;
+background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+transition: left 0.5s;
+}
+
+.card-hover:hover::before {
+left: 100%;
+}
+
+.card-hover:hover {
+transform: translateY(-5px);
+box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+}
+
+.card-blue{background: linear-gradient(135deg, #3b82f6, #1d4ed8);}
+.card-green{background: linear-gradient(135deg, #22c55e, #16a34a);}
+.card-orange{background: linear-gradient(135deg, #f59e0b, #d97706);}
+
+.card-icon {
+opacity: 0.8;
+}
+
+.card-footer-text {
+font-size: 0.85rem;
+margin-top: 10px;
+opacity: 0.9;
+font-weight: 500;
+}
+
+.progress{
+height:20px;
+border-radius:15px;
+}
+
+.dark-mode{
+background:#0f172a;
+color:white;
+}
+
+/* Loading Animation */
+.loading-overlay {
+display: none;
+position: fixed;
+top: 0;
+left: 0;
+width: 100%;
+height: 100%;
+background: rgba(0, 0, 0, 0.5);
+z-index: 9999;
+align-items: center;
+justify-content: center;
+}
+
+.loading-overlay.active {
+display: flex;
+}
+
+.spinner {
+border: 4px solid rgba(255, 255, 255, 0.3);
+border-radius: 50%;
+border-top: 4px solid #3b82f6;
+width: 50px;
+height: 50px;
+animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+0% { transform: rotate(0deg); }
+100% { transform: rotate(360deg); }
+}
+
+.loading-text {
+color: white;
+margin-left: 15px;
+font-size: 1.1rem;
+font-weight: 500;
+}
+
+.page-transition {
+animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+from { opacity: 0; }
+to { opacity: 1; }
+}
+
+/* Form Submit Button Loading State */
+.btn.loading {
+pointer-events: none;
+opacity: 0.7;
+}
+
+.btn.loading::after {
+content: '';
+display: inline-block;
+width: 14px;
+height: 14px;
+margin-left: 8px;
+border: 2px solid #ffffff;
+border-radius: 50%;
+border-top-color: transparent;
+animation: spin 0.6s linear infinite;
+vertical-align: middle;
+}
+
+/* Page Load Progress Bar */
+.progress-bar-loading {
+position: fixed;
+top: 0;
+left: 0;
+height: 3px;
+background: linear-gradient(90deg, #3b82f6, #22c55e, #f59e0b);
+width: 0%;
+z-index: 10000;
+animation: slideIn 0.5s ease-out;
+}
+
+@keyframes slideIn {
+from { width: 10%; }
+to { width: 90%; }
+}
+
+</style>
+
+</head>
+
+<body>
+
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text">Loading...</div>
+</div>
+
+<!-- Progress Bar -->
+<div class="progress-bar-loading" id="progressBar"></div>
+
+<!-- Top Navbar -->
+<nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
+  <div class="container-fluid">
+    <div class="d-flex align-items-center">
+      <span class="navbar-brand mb-0 h1 me-3">📚 Study Planner</span>
+      {% if pending_tasks > 0 %}
+      <span class="badge bg-danger fs-6 px-3 py-2" title="Pending Tasks">
+        <i class="fa-solid fa-tasks me-1"></i>{{ pending_tasks }} Pending
+      </span>
+      {% else %}
+      <span class="badge bg-success fs-6 px-3 py-2" title="All Tasks Completed">
+        <i class="fa-solid fa-check-circle me-1"></i>All Done!
+      </span>
+      {% endif %}
+    </div>
+    <div class="d-flex">
+      <div class="dropdown">
+        <button class="btn btn-outline-primary dropdown-toggle" type="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+          <i class="fa-solid fa-user"></i> {{ user.username }}
+        </button>
+        <ul class="dropdown-menu" aria-labelledby="userDropdown">
+          <li><a class="dropdown-item" href="{% url 'profile' %}"><i class="fa-solid fa-user"></i> Profile</a></li>
+          <li><hr class="dropdown-divider"></li>
+          <li><a class="dropdown-item" href="{% url 'logout' %}"><i class="fa-solid fa-sign-out-alt"></i> Logout</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<div class="container-fluid">
+
+<div class="row">
+
+<!-- Sidebar -->
+
+<div class="col-md-2 sidebar">
+
+<h4>📚 Planner</h4>
+
+<div class="mb-3">
+    <small>Welcome, {{ user.username }}!</small>
+</div>
+
+<a href="{% url 'dashboard' %}" class="nav-link"><i class="fa-solid fa-chart-line"></i> Dashboard</a>
+<a href="{% url 'tasks' %}" class="nav-link"><i class="fa-solid fa-list-check"></i> Tasks</a>
+<a href="{% url 'monthly_planner' %}" class="nav-link"><i class="fa-solid fa-calendar"></i> Monthly</a>
+<a href="/add/" class="nav-link"><i class="fa-solid fa-plus"></i> Add Task</a>
+<a href="{% url 'profile' %}" class="nav-link"><i class="fa-solid fa-user"></i> Profile</a>
+
+<hr>
+
+<a href="{% url 'logout' %}" class="nav-link"><i class="fa-solid fa-sign-out-alt"></i> Logout</a>
+
+<button onclick="toggleMode()" class="btn btn-sm btn-light mt-3 ms-3">
+🌙 Toggle Mode
+</button>
+
+</div>
+
+<!-- Main Content -->
+
+<div class="col-md-10 p-4" style="margin-left: 16.666667%; margin-top: 56px;">
+
+<h2 class="mb-4">Dashboard</h2>
+
+<!-- Welcome Section -->
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="card shadow-sm border-0" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 15px;">
+      <div class="card-body p-4">
+        <div class="row align-items-center">
+          <div class="col-md-8">
+            <h3 class="mb-2">{{ greeting }}, {{ user.first_name|default:user.username }}! 👋</h3>
+            <p class="mb-1"><strong>{{ current_day }}, {{ current_date }}</strong></p>
+            <p class="mb-0">{{ motivation }}</p>
+          </div>
+          <div class="col-md-4 text-end">
+            <i class="fas fa-graduation-cap" style="font-size: 4rem; opacity: 0.8;"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Deadline Notifications -->
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="card shadow-sm border-0">
+      <div class="card-body p-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="mb-0 text-muted">
+            <i class="fa-solid fa-bell me-2"></i>Deadline Notifications
+          </h5>
+          <div>
+            <span class="badge bg-danger me-2">{{ overdue_tasks|length }} Overdue</span>
+            <span class="badge bg-warning text-dark">{{ upcoming_tasks|length }} Due Soon</span>
+          </div>
+        </div>
+        {% if overdue_tasks or upcoming_tasks %}
+          <div class="row">
+            {% if overdue_tasks %}
+            <div class="col-md-6 mb-3">
+              <div class="p-3 rounded" style="background: #ffe3e3; border-left: 4px solid #dc2626;">
+                <h6 class="mb-2 text-danger"><i class="fa-solid fa-triangle-exclamation me-2"></i>Overdue Tasks</h6>
+                <ul class="list-unstyled mb-0">
+                  {% for task in overdue_tasks|slice:":3" %}
+                    <li class="mb-2">
+                      <strong>{{ task.title }}</strong><br>
+                      <small class="text-muted">{{ task.subject }} • due {{ task.deadline|date:"M j" }}</small>
+                    </li>
+                  {% endfor %}
+                </ul>
+                {% if overdue_tasks|length > 3 %}
+                  <div class="text-end mt-2"><small class="text-muted">And {{ overdue_tasks|length|add:"-3" }} more overdue.</small></div>
+                {% endif %}
+              </div>
+            </div>
+            {% endif %}
+            {% if upcoming_tasks %}
+            <div class="col-md-6 mb-3">
+              <div class="p-3 rounded" style="background: #fffbeb; border-left: 4px solid #f59e0b;">
+                <h6 class="mb-2 text-warning"><i class="fa-solid fa-clock me-2"></i>Due Soon</h6>
+                <ul class="list-unstyled mb-0">
+                  {% for task in upcoming_tasks|slice:":3" %}
+                    <li class="mb-2">
+                      <strong>{{ task.title }}</strong><br>
+                      <small class="text-muted">{{ task.subject }} • due {{ task.deadline|date:"M j" }}</small>
+                    </li>
+                  {% endfor %}
+                </ul>
+                {% if upcoming_tasks|length > 3 %}
+                  <div class="text-end mt-2"><small class="text-muted">And {{ upcoming_tasks|length|add:"-3" }} more due soon.</small></div>
+                {% endif %}
+              </div>
+            </div>
+            {% endif %}
+          </div>
+        {% else %}
+          <div class="text-center py-4">
+            <i class="fa-solid fa-check-circle fa-3x text-success mb-3"></i>
+            <h5 class="text-muted">No deadline alerts right now.</h5>
+            <p class="text-muted mb-0">Your task schedule is looking good.</p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Quick Filters -->
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="card shadow-sm border-0">
+      <div class="card-body p-3">
+        <div class="d-flex justify-content-between align-items-center">
+          <h5 class="mb-0 text-muted">
+            <i class="fa-solid fa-bolt me-2"></i>Quick Filters
+          </h5>
+          <div class="btn-group btn-group-sm" role="group">
+            <a href="{% url 'tasks' %}" class="btn btn-outline-primary">
+              <i class="fa-solid fa-list me-1"></i>All Tasks
+              <span class="badge bg-primary text-white ms-1">{{ total_tasks }}</span>
+            </a>
+            <a href="{% url 'tasks' %}?status=pending" class="btn btn-outline-warning">
+              <i class="fa-solid fa-clock me-1"></i>Pending
+              <span class="badge bg-warning text-dark ms-1">{{ pending_tasks }}</span>
+            </a>
+            <a href="{% url 'tasks' %}?status=completed" class="btn btn-outline-success">
+              <i class="fa-solid fa-check me-1"></i>Completed
+              <span class="badge bg-success text-white ms-1">{{ completed_tasks }}</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Today's Tasks Highlight -->
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="card shadow-sm border-0" style="background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 50%, #fecfef 100%); border-radius: 15px; border-left: 5px solid #ff6b9d;">
+      <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h4 class="mb-0 text-dark">
+            <i class="fa-solid fa-star text-warning me-2"></i>
+            Today's Tasks
+            <span class="badge bg-danger ms-2">{{ todays_tasks|length }}</span>
+          </h4>
+          <a href="{% url 'tasks' %}" class="btn btn-outline-primary btn-sm">
+            <i class="fa-solid fa-arrow-right"></i> View All
+          </a>
+        </div>
+
+        {% if todays_tasks %}
+          <div class="row">
+            {% for task in todays_tasks|slice:":4" %}
+            <div class="col-md-3 mb-3">
+              <div class="card h-100 border-0 shadow-sm" style="background: rgba(255,255,255,0.9);">
+                <div class="card-body p-3">
+                  <div class="d-flex align-items-start">
+                    <div class="flex-grow-1">
+                      <h6 class="card-title mb-1 text-truncate">{{ task.title }}</h6>
+                      <small class="text-muted">{{ task.subject }}</small>
+                    </div>
+                    <div class="ms-2">
+                      <span class="badge bg-warning text-dark">
+                        <i class="fa-solid fa-clock"></i>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% if todays_tasks|length > 4 %}
+          <div class="text-center mt-2">
+            <small class="text-muted">And {{ todays_tasks|length|add:"-4" }} more tasks...</small>
+          </div>
+          {% endif %}
+        {% else %}
+          <div class="text-center py-4">
+            <i class="fa-solid fa-check-circle fa-3x text-success mb-3"></i>
+            <h5 class="text-muted">No tasks due today!</h5>
+            <p class="text-muted mb-0">Great job staying on top of your schedule.</p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Charts Section -->
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="card shadow-sm border-0">
+      <div class="card-header bg-white border-0 py-3">
+        <h5 class="mb-0">
+          <i class="fa-solid fa-chart-line text-primary me-2"></i>
+          Study Analytics
+        </h5>
+      </div>
+      <div class="card-body">
+        <div class="row">
+          <!-- Weekly Progress Chart -->
+          <div class="col-md-8 mb-4">
+            <h6 class="text-muted mb-3">
+              <i class="fa-solid fa-calendar-week me-1"></i>
+              Weekly Task Progress
+            </h6>
+            <canvas id="weeklyChart" width="400" height="200"></canvas>
+          </div>
+
+          <!-- Subject Distribution Chart -->
+          <div class="col-md-4 mb-4">
+            <h6 class="text-muted mb-3">
+              <i class="fa-solid fa-pie-chart me-1"></i>
+              Tasks by Subject
+            </h6>
+            <canvas id="subjectChart" width="200" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Analytics Cards -->
+
+<div class="row mb-4">
+
+<div class="col-md-4">
+<a href="{% url 'tasks' %}" class="text-decoration-none">
+<div class="dashboard-card card-blue card-hover">
+<div class="d-flex justify-content-between align-items-center">
+  <div>
+    <h5 class="mb-1"><i class="fa-solid fa-list-check me-2"></i>Total Tasks</h5>
+    <h3 class="mb-0">{{total_tasks}}</h3>
+  </div>
+  <div class="card-icon">
+    <i class="fa-solid fa-tasks fa-2x opacity-75"></i>
+  </div>
+</div>
+<div class="card-footer-text">
+  View all tasks →
+</div>
+</div>
+</a>
+</div>
+
+<div class="col-md-4">
+<a href="{% url 'tasks' %}?status=completed" class="text-decoration-none">
+<div class="dashboard-card card-green card-hover">
+<div class="d-flex justify-content-between align-items-center">
+  <div>
+    <h5 class="mb-1"><i class="fa-solid fa-check-circle me-2"></i>Completed</h5>
+    <h3 class="mb-0">{{completed_tasks}}</h3>
+  </div>
+  <div class="card-icon">
+    <i class="fa-solid fa-trophy fa-2x opacity-75"></i>
+  </div>
+</div>
+<div class="card-footer-text">
+  View completed →
+</div>
+</div>
+</a>
+</div>
+
+<div class="col-md-4">
+<a href="{% url 'tasks' %}?status=pending" class="text-decoration-none">
+<div class="dashboard-card card-orange card-hover">
+<div class="d-flex justify-content-between align-items-center">
+  <div>
+    <h5 class="mb-1"><i class="fa-solid fa-clock me-2"></i>Pending</h5>
+    <h3 class="mb-0">{{pending_tasks}}</h3>
+  </div>
+  <div class="card-icon">
+    <i class="fa-solid fa-hourglass-half fa-2x opacity-75"></i>
+  </div>
+</div>
+<div class="card-footer-text">
+  View pending →
+</div>
+</div>
+</a>
+</div>
+
+</div>
+
+<!-- Progress -->
+
+<h5>Task Progress</h5>
+
+<div class="progress mb-3">
+
+<div class="progress-bar bg-success" role="progressbar" style="width: {{ progress }}%;" aria-valuenow="{{ progress }}" aria-valuemin="0" aria-valuemax="100">
+
+{{ progress }}%
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+<script>
+
+function toggleMode(){
+document.body.classList.toggle("dark-mode");
+}
+
+// Loading Animation Functions
+function showLoading() {
+  document.getElementById('loadingOverlay').classList.add('active');
+  document.getElementById('progressBar').style.display = 'block';
+}
+
+function hideLoading() {
+  document.getElementById('loadingOverlay').classList.remove('active');
+  document.getElementById('progressBar').style.display = 'none';
+}
+
+// Auto-hide loading after page loads
+window.addEventListener('load', function() {
+  setTimeout(hideLoading, 300);
+});
+
+// Add loading state to forms
+document.querySelectorAll('form').forEach(form => {
+  form.addEventListener('submit', function(e) {
+    const submitBtn = this.querySelector('button[type="submit"]');
+    if (submitBtn) {
+      submitBtn.classList.add('loading');
+      submitBtn.disabled = true;
+    }
+    showLoading();
+  });
+});
+
+// Add loading on link clicks (internal navigation)
+document.querySelectorAll('a').forEach(link => {
+  if (!link.getAttribute('href')?.includes('#') && !link.getAttribute('target')) {
+    link.addEventListener('click', function(e) {
+      if (this.href && !this.href.includes('logout')) {
+        showLoading();
+      }
+    });
+  }
+});
+
+// Weekly Progress Chart
+const weeklyCtx = document.getElementById('weeklyChart').getContext('2d');
+const weeklyChart = new Chart(weeklyCtx, {
+    type: 'line',
+    data: {
+        labels: {{ weekly_labels|safe }},
+        datasets: [{
+            label: 'Completed',
+            data: {{ weekly_completed|safe }},
+            borderColor: '#22c55e',
+            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+            tension: 0.4,
+            fill: true
+        }, {
+            label: 'Pending',
+            data: {{ weekly_pending|safe }},
+            borderColor: '#f59e0b',
+            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+            tension: 0.4,
+            fill: true
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                position: 'top',
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    stepSize: 1
+                }
+            }
+        }
+    }
+});
+
+// Subject Distribution Chart
+const subjectCtx = document.getElementById('subjectChart').getContext('2d');
+const subjectChart = new Chart(subjectCtx, {
+    type: 'doughnut',
+    data: {
+        labels: {{ subject_labels|safe }},
+        datasets: [{
+            data: {{ subject_counts|safe }},
+            backgroundColor: [
+                '#3b82f6', // Blue
+                '#22c55e', // Green
+                '#f59e0b', // Orange
+                '#ef4444', // Red
+                '#8b5cf6', // Purple
+                '#06b6d4', // Cyan
+                '#f97316', // Orange-red
+                '#84cc16', // Lime
+            ],
+            borderWidth: 2,
+            borderColor: '#ffffff'
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                position: 'bottom',
+                labels: {
+                    padding: 20,
+                    usePointStyle: true
+                }
+            }
+        }
+    }
+});
+
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+</body>
+</html>
